@@ -1,19 +1,22 @@
-
-# ## Forms a difference matrix, for use with fused lasso/trend filtering
-#
-# function form_D(n)
-#     D = zeros(n-1,n)
-#     for i=1:(n-1)
-#         D[i,i] = -1
-#         D[i,i+1] = 1
-#     end
-#     return D
-# end
-#
+"""Utility functions """
 
 import numpy as np
 
 def form_D(n):
+    """
+    Form a first-difference matrix
+
+    Parameters
+    ----------
+    n : int
+        The number of entries in the vector to be differenced.
+
+    Returns
+    -------
+    D : (n-1, n) array
+       With -1 on the diagonal and 1 on the supradigonal. When applied to a
+       vector, produces the first difference vector of the data.
+    """
     D = np.zeros((n-1, n))
     for i in range(n-1):
         D[i, i] = -1
@@ -21,28 +24,76 @@ def form_D(n):
     return D
 
 
+def form_DxInv(x, order):
+    """
+
+    Parameters
+    ----------
+    x : 1D array
+       Sampling points on the relevant x axis (e.g. age, points along the
+       tracks, etc.). Assumed to be ordered
+    order : int
+       The order of differentiation
+
+    Returns
+    -------
+    D :
+       Diagonal matrix that has 1/spacing between order-spaced points
+    """
+    if not np.all(np.sort(x) == x):
+        msg = "Please order the input x, before passing to DxInv"
+        raise ValueError(msg)
+
+    m = x.shape[0] - order
+    D = np.zeros((m, m))
+    for i in range(m):
+        D[i, i] = 1/(x[i+order] - x[i])
+    return D
+
 #
-# ## Forms an "inverse difference matrix", for use with unequally spaced trend filtering
+# ## Averages observations with the same age, and returns a new X vector, and weights corresponding to number of terms averaged
 #
-# function DxInv(x, order)
-#     D = zeros(length(x)-order,length(x)-order)
-#     for i=1:(length(x)-order)
-#         D[i,i] = 1/(x[i+order] - x[i])
-#     end
-#     return D
-# end
-#
-# ## Checks each row of a matrix for NAs --- returns row-numbers with NAs
-#
-# function hasNaN(X)
+# function combine(ages, X)
 #     (n,p) = size(X)
-#     remove = zeros(n)
-#     for i=1:n
-#         remove[i] = sum(isnan(X[i,:])) >= 1
+#     unique_ages = unique(ages)
+#     weights = Float32[]
+#     new_X = Array(Float32,0,p)
+#     for age in unique_ages
+#         push!(weights, sum(age.==ages))
+#         new_X = vcat(new_X, mean(X[find(ages.==age),:],1))
 #     end
-# return remove
+#     return {"X"=>new_X, "w"=>weights, "age"=>unique_ages}
 # end
 #
+
+def combine_by_x(x, Y):
+    """
+    Combine multiple observations with the same sampling values.
+
+    Parameters
+    ----------
+    Y (n, p) array
+       Where n is the number of subjects and p is the number
+       of observations tracts.
+
+    Returns
+    -------
+    average_y :
+    weights :
+    unique_x :
+    """
+    unique_x = np.unique(x)
+    weights = np.zeros(unique_x.shape[0])
+    # We'll reduce Y down to less rows:
+    new_Y = np.zeros((unique_x.shape[0], Y.shape[1]))
+    for i, u in enumerate(unique_x):
+        idx = np.isclose(x, u)
+        new_Y[i] = np.mean(Y[idx], -1)
+        weights[i] = np.sum(idx)
+
+    return new_Y, weights, unique_x
+
+
 # function fitter(X, D, D0, lam1, lam2)
 #     (n, p) = size(X)
 #     b = Variable(p,n)
@@ -73,20 +124,5 @@ def form_D(n):
 #     problem = minimize(quad_form(ones(n,1) * b + age * beta - X, diagm(vec(w))) + lam1*norm(D*b',1) + lam2*norm((beta),1))
 #     out = solve!(problem, SCSSolver(max_iters = 100000, normalize = 0))
 #     return {"b"=>b.value, "beta"=>beta.value}
-# end
-#
-#
-# ## Averages observations with the same age, and returns a new X vector, and weights corresponding to number of terms averaged
-#
-# function combine(ages, X)
-#     (n,p) = size(X)
-#     unique_ages = unique(ages)
-#     weights = Float32[]
-#     new_X = Array(Float32,0,p)
-#     for age in unique_ages
-#         push!(weights, sum(age.==ages))
-#         new_X = vcat(new_X, mean(X[find(ages.==age),:],1))
-#     end
-#     return {"X"=>new_X, "w"=>weights, "age"=>unique_ages}
 # end
 #
